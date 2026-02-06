@@ -25,8 +25,8 @@ uploaded_file = st.file_uploader(
 
 def unwrap_safelink(link):
     """
-    Detect Outlook SafeLinks and return the actual target URL.
-    If it’s not a safelink, returns the original link.
+    Convert Outlook SafeLinks to real destination URLs.
+    Handles EMEA, US, and multi-encoded URLs.
     """
     if not link:
         return link
@@ -36,11 +36,14 @@ def unwrap_safelink(link):
         qs = parse_qs(parsed.query)
         if "url" in qs:
             real_url = qs["url"][0]
-            # decode multiple levels of URL encoding
-            while "%3A%2F%2F" in real_url or "%2F" in real_url:
+            # decode multiple times in case of double-encoding
+            for _ in range(3):
                 real_url = unquote(real_url)
+            # ensure it starts with http:// or https://
+            if not real_url.startswith(("http://", "https://")):
+                real_url = "http://" + real_url
             return real_url
-        return unquote(link)
+        return link
     return link
 
 if uploaded_file:
