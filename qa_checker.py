@@ -6,7 +6,20 @@ from openai import OpenAI
 import pandas as pd
 import os
 from urllib.parse import parse_qs, urlparse, unquote
-from textblob import TextBlob  # <-- pure Python spell/grammar
+
+# === TextBlob + NLTK setup for cloud ===
+from textblob import TextBlob
+import nltk
+
+# Ensure TextBlob has the necessary NLTK data
+nltk_data_dir = "/tmp/nltk_data"
+os.makedirs(nltk_data_dir, exist_ok=True)
+nltk.data.path.append(nltk_data_dir)
+
+try:
+    nltk.data.find("tokenizers/punkt")
+except LookupError:
+    nltk.download("punkt", download_dir=nltk_data_dir)
 
 # === OpenAI API Key (optional) ===
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
@@ -106,7 +119,7 @@ if uploaded_file:
     st.write(tokens or "None")
 
     # === Spell & Grammar Check using TextBlob ===
-    st.subheader("Spell & Grammar Check (Local / Cloud-Friendly)")
+    st.subheader("Spell & Grammar Check (Cloud-Friendly)")
     email_text = soup.get_text()
     blob = TextBlob(email_text or "")
     corrected_sentences = []
