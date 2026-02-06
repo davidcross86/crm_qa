@@ -124,8 +124,9 @@ if uploaded_file:
 
     if misspelled:
         for word in misspelled:
-            suggestions = sorted(spell.candidates(word))
-            if suggestions:
+            candidates = spell.candidates(word)
+            if candidates:
+                suggestions = sorted(candidates)
                 st.write(f"Misspelled: {word} → Suggestions: {', '.join(suggestions)}")
             else:
                 st.write(f"Misspelled: {word} → No suggestions available")
