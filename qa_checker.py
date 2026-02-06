@@ -6,7 +6,7 @@ from openai import OpenAI
 import pandas as pd
 import os
 from urllib.parse import parse_qs, urlparse, unquote
-from gingerit.gingerit import GingerIt  # cloud-friendly spell & grammar
+from spellchecker import SpellChecker  # cloud-friendly
 
 # === OpenAI API Key (optional) ===
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
@@ -105,18 +105,17 @@ if uploaded_file:
     st.subheader("Personalization Tokens")
     st.write(tokens or "None")
 
-    # === Spell & Grammar Check using GingerIt ===
-    st.subheader("Spell & Grammar Check (Cloud-Friendly)")
-    parser = GingerIt()
-    try:
-        result = parser.parse(html_content or "")
-        if result.get("corrections"):
-            for c in result["corrections"]:
-                st.write(f"Original: {c['text']} → Suggestion: {c['correct']}")
-        else:
-            st.write("No spelling or grammar issues found.")
-    except Exception as e:
-        st.error(f"Spell & grammar check failed: {e}")
+    # === Spell Check using PySpellChecker ===
+    st.subheader("Spelling Check (Cloud-Friendly)")
+    spell = SpellChecker()
+    words = re.findall(r"\w+", soup.get_text() or "")
+    misspelled = spell.unknown(words)
+
+    if misspelled:
+        for word in misspelled:
+            st.write(f"Misspelled: {word} → Suggestions: {', '.join(spell.candidates(word))}")
+    else:
+        st.write("No spelling issues found.")
 
     # === AI Content Review (optional) ===
     if OPENAI_API_KEY:
