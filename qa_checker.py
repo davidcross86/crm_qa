@@ -2,55 +2,100 @@ import streamlit as st
 from bs4 import BeautifulSoup
 import requests
 import re
-import os
 from openai import OpenAI
-from dotenv import load_dotenv
+import pandas as pd
 
-# Load .env only locally; Streamlit Cloud uses Secrets
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# === OpenAI API Key from Streamlit secrets ===
+OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
-    OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY")
+    st.error("OpenAI API key not found. Please add it to Streamlit secrets.")
+    st.stop()
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 st.title("CRM Email QA Tool")
 
-# File uploader
-uploaded_file = st.file_uploader("Upload an HTML email file", type=["html"])
+# === File uploader ===
+uploaded_file = st.file_uploader(
+    "Upload an email file",
+    type=["html", "msg", "eml"]
+)
+
 if uploaded_file:
-    html_content = uploaded_file.read().decode("utf-8")
+    file_name = uploaded_file.name
+    file_bytes = uploaded_file.read()
+
+    html_content = ""
+    subject_line = ""
+
+    if file_name.endswith(".html"):
+        html_content = file_bytes.decode("utf-8")
+        subject_line = "N/A"
+
+    elif file_name.endswith(".msg"):
+        import extract_msg, os
+        temp_path = f"/tmp/{file_name}"
+        with open(temp_path, "wb") as f:
+            f.write(file_bytes)
+        msg = extract_msg.Message(temp_path)
+        html_content = msg.body or msg.htmlBody or ""
+        subject_line = msg.subject or "N/A"
+
+    elif file_name.endswith(".eml"):
+        import mailparser
+        mail = mailparser.parse_from_bytes(file_bytes)
+        html_content = mail.body_html or mail.body or ""
+        subject_line = mail.subject or "N/A"
+
+    if not html_content:
+        st.warning("Could not extract content from this email.")
+        st.stop()
+
     soup = BeautifulSoup(html_content, "html.parser")
 
-    # Extract links
+    # === Subject line ===
+    st.subheader("Subject Line")
+    st.write(subject_line)
+
+    # === Link check ===
     links = [a['href'] for a in soup.find_all('a', href=True)]
-    broken_links = []
-    missing_utms = []
+    link_status = []
 
     for link in links:
+        status = "OK"
         try:
             r = requests.get(link, timeout=5)
             if r.status_code != 200:
-                broken_links.append(link)
-            if "utm_" not in link:
-                missing_utms.append(link)
+                status = "Broken"
         except:
-            broken_links.append(link)
+            status = "Broken"
 
-    st.subheader("Broken Links")
-    st.write(broken_links or "None")
+        if "utm_" not in link:
+            status += " (Missing UTM)"
 
-    st.subheader("Links Missing UTM")
-    st.write(missing_utms or "None")
+        link_status.append({"Link": link, "Status": status})
 
-    # Personalization tokens
+    st.subheader("Links Table")
+    df = pd.DataFrame(link_status)
+    
+    def color_status(val):
+        if "Broken" in val:
+            return "color: red"
+        elif "Missing UTM" in val:
+            return "color: orange"
+        else:
+            return "color: green"
+    
+    st.dataframe(df.style.applymap(color_status, subset=["Status"]))
+
+    # === Personalization tokens ===
     tokens = re.findall(r"\{\{.*?\}\}", html_content)
     st.subheader("Personalization Tokens")
     st.write(tokens or "None")
 
-    # AI content review
-    email_text = soup.get_text()
+    # === AI Content Review ===
     st.subheader("AI Content Review")
+    email_text = soup.get_text()
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
