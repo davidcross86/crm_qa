@@ -5,14 +5,15 @@ import re
 from openai import OpenAI
 import pandas as pd
 import os
+from urllib.parse import parse_qs, urlparse, unquote
+import language_tool_python
 
-# === Load OpenAI API key safely (Cloud or local) ===
+# === OpenAI API Key (optional) ===
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    st.error("OpenAI API key not found. Add it as a Streamlit secret or environment variable.")
-    st.stop()
-
-client = OpenAI(api_key=OPENAI_API_KEY)
+if OPENAI_API_KEY:
+    client = OpenAI(api_key=OPENAI_API_KEY)
+else:
+    st.warning("OpenAI key not found. AI content review will be disabled.")
 
 st.title("CRM Email QA Tool")
 
@@ -21,6 +22,15 @@ uploaded_file = st.file_uploader(
     "Upload an email file",
     type=["html", "msg", "eml"]
 )
+
+def unwrap_safelink(link):
+    """If the link is an Outlook safelink, return the real URL."""
+    if "safelinks.protection.outlook.com" in link:
+        parsed = urlparse(link)
+        qs = parse_qs(parsed.query)
+        if "url" in qs:
+            return unquote(qs["url"][0])
+    return link
 
 if uploaded_file:
     file_name = uploaded_file.name
@@ -64,9 +74,10 @@ if uploaded_file:
     link_status = []
 
     for link in links:
+        real_link = unwrap_safelink(link)
         status = "OK"
         try:
-            r = requests.get(link, timeout=5)
+            r = requests.get(real_link, timeout=5)
             if r.status_code != 200:
                 status = "Broken"
         except:
@@ -94,17 +105,29 @@ if uploaded_file:
     st.subheader("Personalization Tokens")
     st.write(tokens or "None")
 
-    # === AI Content Review ===
-    st.subheader("AI Content Review")
+    # === Local Spell & Grammar Check ===
+    st.subheader("Spell & Grammar Check (Local)")
+    tool = language_tool_python.LanguageTool('en-US')
     email_text = soup.get_text()
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are an email QA assistant for financial services marketing."},
-                {"role": "user", "content": f"Review this email content for grammar, tone, clarity and compliance risks:\n\n{email_text}"}
-            ]
-        )
-        st.write(response.choices[0].message.content)
-    except Exception as e:
-        st.error(f"AI review failed: {e}")
+    matches = tool.check(email_text or "")
+
+    if matches:
+        for match in matches:
+            st.write(f"Issue: {match.message} | Suggestion: {', '.join(match.replacements) if match.replacements else 'No suggestion'}")
+    else:
+        st.write("No spelling or grammar issues found.")
+
+    # === AI Content Review (optional) ===
+    if OPENAI_API_KEY:
+        st.subheader("AI Content Review")
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are an email QA assistant for financial services marketing."},
+                    {"role": "user", "content": f"Review this email content for grammar, tone, clarity and compliance risks:\n\n{email_text}"}
+                ]
+            )
+            st.write(response.choices[0].message.content)
+        except Exception as e:
+            st.error(f"AI review failed: {e}")
