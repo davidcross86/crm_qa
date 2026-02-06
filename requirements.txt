@@ -1,0 +1,6 @@
+streamlit
+requests
+beautifulsoup4
+openai
+python-dotenv
+extract-msg
