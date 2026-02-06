@@ -24,12 +24,23 @@ uploaded_file = st.file_uploader(
 )
 
 def unwrap_safelink(link):
-    """If the link is an Outlook safelink, return the real URL."""
+    """
+    Detect Outlook SafeLinks and return the actual target URL.
+    If it’s not a safelink, returns the original link.
+    """
+    if not link:
+        return link
+
     if "safelinks.protection.outlook.com" in link:
         parsed = urlparse(link)
         qs = parse_qs(parsed.query)
         if "url" in qs:
-            return unquote(qs["url"][0])
+            real_url = qs["url"][0]
+            # decode multiple levels of URL encoding
+            while "%3A%2F%2F" in real_url or "%2F" in real_url:
+                real_url = unquote(real_url)
+            return real_url
+        return unquote(link)
     return link
 
 if uploaded_file:
@@ -113,7 +124,11 @@ if uploaded_file:
 
     if misspelled:
         for word in misspelled:
-            st.write(f"Misspelled: {word} → Suggestions: {', '.join(spell.candidates(word))}")
+            suggestions = sorted(spell.candidates(word))
+            if suggestions:
+                st.write(f"Misspelled: {word} → Suggestions: {', '.join(suggestions)}")
+            else:
+                st.write(f"Misspelled: {word} → No suggestions available")
     else:
         st.write("No spelling issues found.")
 
