@@ -7,3 +7,4 @@ extract-msg
 language-tool-python
 textblob
 gingerit
+pyspellchecker
