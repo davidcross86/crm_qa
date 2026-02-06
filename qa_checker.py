@@ -4,18 +4,19 @@ import requests
 import re
 from openai import OpenAI
 import pandas as pd
+import os
 
-# === OpenAI API Key from Streamlit secrets ===
-OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY")
+# === Load OpenAI API key safely (Cloud or local) ===
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
-    st.error("OpenAI API key not found. Please add it to Streamlit secrets.")
+    st.error("OpenAI API key not found. Add it as a Streamlit secret or environment variable.")
     st.stop()
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 st.title("CRM Email QA Tool")
 
-# === File uploader ===
+# === File uploader for HTML, MSG, EML ===
 uploaded_file = st.file_uploader(
     "Upload an email file",
     type=["html", "msg", "eml"]
@@ -24,16 +25,16 @@ uploaded_file = st.file_uploader(
 if uploaded_file:
     file_name = uploaded_file.name
     file_bytes = uploaded_file.read()
-
     html_content = ""
     subject_line = ""
 
+    # === Process based on file type ===
     if file_name.endswith(".html"):
         html_content = file_bytes.decode("utf-8")
         subject_line = "N/A"
 
     elif file_name.endswith(".msg"):
-        import extract_msg, os
+        import extract_msg
         temp_path = f"/tmp/{file_name}"
         with open(temp_path, "wb") as f:
             f.write(file_bytes)
@@ -49,7 +50,7 @@ if uploaded_file:
 
     if not html_content:
         st.warning("Could not extract content from this email.")
-        st.stop()
+        html_content = ""
 
     soup = BeautifulSoup(html_content, "html.parser")
 
@@ -57,7 +58,7 @@ if uploaded_file:
     st.subheader("Subject Line")
     st.write(subject_line)
 
-    # === Link check ===
+    # === Link extraction & checks ===
     links = [a['href'] for a in soup.find_all('a', href=True)]
     link_status = []
 
@@ -69,15 +70,14 @@ if uploaded_file:
                 status = "Broken"
         except:
             status = "Broken"
-
         if "utm_" not in link:
             status += " (Missing UTM)"
-
         link_status.append({"Link": link, "Status": status})
 
+    # === Display links table with color-coded status ===
     st.subheader("Links Table")
     df = pd.DataFrame(link_status)
-    
+
     def color_status(val):
         if "Broken" in val:
             return "color: red"
@@ -85,11 +85,11 @@ if uploaded_file:
             return "color: orange"
         else:
             return "color: green"
-    
+
     st.dataframe(df.style.applymap(color_status, subset=["Status"]))
 
-    # === Personalization tokens ===
-    tokens = re.findall(r"\{\{.*?\}\}", html_content)
+    # === Personalization token check ===
+    tokens = re.findall(r"\{\{.*?\}\}", html_content or "")
     st.subheader("Personalization Tokens")
     st.write(tokens or "None")
 
