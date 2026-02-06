@@ -6,20 +6,7 @@ from openai import OpenAI
 import pandas as pd
 import os
 from urllib.parse import parse_qs, urlparse, unquote
-
-# === TextBlob + NLTK setup for cloud ===
-from textblob import TextBlob
-import nltk
-
-# Ensure TextBlob has the necessary NLTK data
-nltk_data_dir = "/tmp/nltk_data"
-os.makedirs(nltk_data_dir, exist_ok=True)
-nltk.data.path.append(nltk_data_dir)
-
-try:
-    nltk.data.find("tokenizers/punkt")
-except LookupError:
-    nltk.download("punkt", download_dir=nltk_data_dir)
+from gingerit.gingerit import GingerIt  # cloud-friendly spell & grammar
 
 # === OpenAI API Key (optional) ===
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
@@ -118,26 +105,23 @@ if uploaded_file:
     st.subheader("Personalization Tokens")
     st.write(tokens or "None")
 
-    # === Spell & Grammar Check using TextBlob ===
+    # === Spell & Grammar Check using GingerIt ===
     st.subheader("Spell & Grammar Check (Cloud-Friendly)")
-    email_text = soup.get_text()
-    blob = TextBlob(email_text or "")
-    corrected_sentences = []
-
-    for sentence in blob.sentences:
-        corrected = sentence.correct()
-        if str(corrected) != str(sentence):
-            corrected_sentences.append((str(sentence), str(corrected)))
-
-    if corrected_sentences:
-        for original, suggestion in corrected_sentences:
-            st.write(f"Original: {original} | Suggestion: {suggestion}")
-    else:
-        st.write("No spelling or grammar issues found.")
+    parser = GingerIt()
+    try:
+        result = parser.parse(html_content or "")
+        if result.get("corrections"):
+            for c in result["corrections"]:
+                st.write(f"Original: {c['text']} → Suggestion: {c['correct']}")
+        else:
+            st.write("No spelling or grammar issues found.")
+    except Exception as e:
+        st.error(f"Spell & grammar check failed: {e}")
 
     # === AI Content Review (optional) ===
     if OPENAI_API_KEY:
         st.subheader("AI Content Review")
+        email_text = soup.get_text()
         try:
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
