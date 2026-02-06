@@ -6,7 +6,7 @@ from openai import OpenAI
 import pandas as pd
 import os
 from urllib.parse import parse_qs, urlparse, unquote
-import language_tool_python
+from textblob import TextBlob  # <-- pure Python spell/grammar
 
 # === OpenAI API Key (optional) ===
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
@@ -105,15 +105,20 @@ if uploaded_file:
     st.subheader("Personalization Tokens")
     st.write(tokens or "None")
 
-    # === Local Spell & Grammar Check ===
-    st.subheader("Spell & Grammar Check (Local)")
-    tool = language_tool_python.LanguageTool('en-US')
+    # === Spell & Grammar Check using TextBlob ===
+    st.subheader("Spell & Grammar Check (Local / Cloud-Friendly)")
     email_text = soup.get_text()
-    matches = tool.check(email_text or "")
+    blob = TextBlob(email_text or "")
+    corrected_sentences = []
 
-    if matches:
-        for match in matches:
-            st.write(f"Issue: {match.message} | Suggestion: {', '.join(match.replacements) if match.replacements else 'No suggestion'}")
+    for sentence in blob.sentences:
+        corrected = sentence.correct()
+        if str(corrected) != str(sentence):
+            corrected_sentences.append((str(sentence), str(corrected)))
+
+    if corrected_sentences:
+        for original, suggestion in corrected_sentences:
+            st.write(f"Original: {original} | Suggestion: {suggestion}")
     else:
         st.write("No spelling or grammar issues found.")
 
