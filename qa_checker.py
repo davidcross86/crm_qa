@@ -30,7 +30,7 @@ if uploaded_file:
 
     # === Process based on file type ===
     if file_name.endswith(".html"):
-        html_content = file_bytes.decode("utf-8")
+        html_content = file_bytes.decode("utf-8", errors="ignore")
         subject_line = "N/A"
 
     elif file_name.endswith(".msg"):
@@ -48,9 +48,10 @@ if uploaded_file:
         html_content = mail.body_html or mail.body or ""
         subject_line = mail.subject or "N/A"
 
-    if not html_content:
-        st.warning("Could not extract content from this email.")
-        html_content = ""
+    # Ensure html_content is a string
+    html_content = html_content or ""
+    if isinstance(html_content, bytes):
+        html_content = html_content.decode(errors="ignore")
 
     soup = BeautifulSoup(html_content, "html.parser")
 
@@ -89,7 +90,7 @@ if uploaded_file:
     st.dataframe(df.style.applymap(color_status, subset=["Status"]))
 
     # === Personalization token check ===
-    tokens = re.findall(r"\{\{.*?\}\}", html_content or "")
+    tokens = re.findall(r"\{\{.*?\}\}", html_content)
     st.subheader("Personalization Tokens")
     st.write(tokens or "None")
 
